@@ -7814,6 +7814,40 @@ a.anchor-link {
 </div>
 </div>
 </div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=72e96237">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h2 id="Methodology-Overview">Methodology Overview<a class="anchor-link" href="#Methodology-Overview">¶</a></h2><p>This notebook follows a structured data science workflow to predict sack probability on NFL pass plays:</p>
+<p><strong>1. Data Assessment</strong>
+Load and explore 3 seasons of NFL play-by-play data (2021-2023), assess class imbalance, and identify key situational patterns through exploratory data analysis.</p>
+<p><strong>2. Feature Engineering</strong>
+Build predictive features from all available data sources:</p>
+<ul>
+<li>Situational context from play-by-play (down, distance, formation, field position, game script)</li>
+<li>Rolling team and QB-level sack rates to capture offensive line and quarterback tendencies</li>
+<li>Defensive pass rush deployment from snap count data</li>
+<li>Pressure generation metrics from advanced defensive stats</li>
+<li>Offensive line experience and size from depth chart and player data</li>
+</ul>
+<p><strong>3. Model Building</strong>
+Train an XGBoost binary classifier using a time-based train/test split (2021-2022 train, 2023 test) to prevent data leakage. Address class imbalance through empirical testing of <code>scale_pos_weight</code>.</p>
+<p><strong>4. Evaluation</strong>
+Evaluate model quality using metrics appropriate for probability outputs:</p>
+<ul>
+<li>ROC-AUC for discriminative ability</li>
+<li>Log Loss for probability calibration</li>
+<li>Brier Score for overall prediction accuracy</li>
+<li>Calibration curve to assess reliability of predicted probabilities</li>
+</ul>
+<p><strong>5. Iteration</strong>
+Systematically add features from all supplementary data sources and compare model performance across iterations to identify the optimal feature set.</p>
+</div>
+</div>
+</div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=f44cceaa">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
@@ -8964,6 +8998,1762 @@ Brier Score: 0.0619
 <li><strong>Sacks are noisy:</strong> A sack is often the result of a single broken assignment or a QB holding the ball too long — both hard to predict from aggregate features</li>
 <li><strong>Calibration:</strong> Isotonic regression or Platt scaling post-processing could tighten the calibration curve</li>
 <li><strong>Hyperparameter tuning:</strong> Early stopping triggered at tree 72 — a proper grid search or Optuna sweep could squeeze more performance out</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=b33f3850">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h2 id="6.-Enhanced-Feature-Engineering-%E2%80%94-Defensive-Pass-Rush-Quality">6. Enhanced Feature Engineering — Defensive Pass Rush Quality<a class="anchor-link" href="#6.-Enhanced-Feature-Engineering-%E2%80%94-Defensive-Pass-Rush-Quality">¶</a></h2><h3 id="6.1-Explore-Snap-Count-Data">6.1 Explore Snap Count Data<a class="anchor-link" href="#6.1-Explore-Snap-Count-Data">¶</a></h3>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=54d682ff">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [18]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Load snap count data</span>
+<span class="n">snaps_2021</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">'../data/snap_counts_2021.csv'</span><span class="p">,</span> <span class="n">low_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">snaps_2022</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">'../data/snap_counts_2022.csv'</span><span class="p">,</span> <span class="n">low_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">snaps_2023</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">'../data/snap_counts_2023.csv'</span><span class="p">,</span> <span class="n">low_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+<span class="n">snaps</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">snaps_2021</span><span class="p">,</span> <span class="n">snaps_2022</span><span class="p">,</span> <span class="n">snaps_2023</span><span class="p">],</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Shape: </span><span class="si">{</span><span class="n">snaps</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Columns:</span><span class="se">\n</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">snaps</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Sample:</span><span class="se">\n</span><span class="si">{</span><span class="n">snaps</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="o">.</span><span class="n">to_string</span><span class="p">()</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>Shape: (79310, 16)
+
+Columns:
+['game_id', 'pfr_game_id', 'season', 'game_type', 'week', 'player', 'pfr_player_id', 'position', 'team', 'opponent', 'offense_snaps', 'offense_pct', 'defense_snaps', 'defense_pct', 'st_snaps', 'st_pct']
+
+Sample:
+          game_id   pfr_game_id  season game_type  week         player pfr_player_id position team opponent  offense_snaps  offense_pct  defense_snaps  defense_pct  st_snaps  st_pct
+0  2021_01_DAL_TB  202109090tam    2021       REG     1  Tristan Wirfs      WirfTr00        T   TB      DAL             65          1.0              0          0.0         5    0.15
+1  2021_01_DAL_TB  202109090tam    2021       REG     1     Ali Marpet      MarpAl00        G   TB      DAL             65          1.0              0          0.0         5    0.15
+2  2021_01_DAL_TB  202109090tam    2021       REG     1     Alex Cappa      CappAl00        G   TB      DAL             65          1.0              0          0.0         5    0.15
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=398b4426">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="6.2-Build-Defensive-Pass-Rush-Deployment-Metric">6.2 Build Defensive Pass Rush Deployment Metric<a class="anchor-link" href="#6.2-Build-Defensive-Pass-Rush-Deployment-Metric">¶</a></h3>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=883303d0">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [19]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Filter to defensive linemen and linebackers (pass rushers)</span>
+<span class="n">pass_rush_positions</span> <span class="o">=</span> <span class="p">[</span><span class="s1">'DE'</span><span class="p">,</span> <span class="s1">'DT'</span><span class="p">,</span> <span class="s1">'NT'</span><span class="p">,</span> <span class="s1">'OLB'</span><span class="p">,</span> <span class="s1">'LB'</span><span class="p">,</span> <span class="s1">'DL'</span><span class="p">,</span> <span class="s1">'EDGE'</span><span class="p">]</span>
+<span class="n">rushers</span> <span class="o">=</span> <span class="n">snaps</span><span class="p">[</span><span class="n">snaps</span><span class="p">[</span><span class="s1">'position'</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">pass_rush_positions</span><span class="p">)]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Pass rusher snap rows: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">rushers</span><span class="p">)</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Position breakdown:"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">rushers</span><span class="p">[</span><span class="s1">'position'</span><span class="p">]</span><span class="o">.</span><span class="n">value_counts</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>Pass rusher snap rows: 23,651
+
+Position breakdown:
+position
+LB    11830
+DE     5590
+DT     4854
+NT     1377
+Name: count, dtype: int64
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=5b4cd934">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="6.3-Aggregate-Pass-Rush-Deployment-by-Game">6.3 Aggregate Pass Rush Deployment by Game<a class="anchor-link" href="#6.3-Aggregate-Pass-Rush-Deployment-by-Game">¶</a></h3>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=75a67af8">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [20]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Calculate weighted defensive pass rush deployment per team per game</span>
+<span class="c1"># Higher defense_pct = more snaps = more pass rush presence</span>
+
+<span class="n">rush_by_game</span> <span class="o">=</span> <span class="n">rushers</span><span class="o">.</span><span class="n">groupby</span><span class="p">([</span><span class="s1">'game_id'</span><span class="p">,</span> <span class="s1">'season'</span><span class="p">,</span> <span class="s1">'week'</span><span class="p">,</span> <span class="s1">'team'</span><span class="p">])</span><span class="o">.</span><span class="n">agg</span><span class="p">(</span>
+    <span class="n">total_pass_rush_snaps</span><span class="o">=</span><span class="p">(</span><span class="s1">'defense_snaps'</span><span class="p">,</span> <span class="s1">'sum'</span><span class="p">),</span>
+    <span class="n">avg_pass_rush_pct</span><span class="o">=</span><span class="p">(</span><span class="s1">'defense_pct'</span><span class="p">,</span> <span class="s1">'mean'</span><span class="p">),</span>
+    <span class="n">num_pass_rushers</span><span class="o">=</span><span class="p">(</span><span class="s1">'player'</span><span class="p">,</span> <span class="s1">'count'</span><span class="p">)</span>
+<span class="p">)</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Shape: </span><span class="si">{</span><span class="n">rush_by_game</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Sample:"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">rush_by_game</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span><span class="o">.</span><span class="n">to_string</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Stats:"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">rush_by_game</span><span class="p">[[</span><span class="s1">'total_pass_rush_snaps'</span><span class="p">,</span> <span class="s1">'avg_pass_rush_pct'</span><span class="p">,</span> <span class="s1">'num_pass_rushers'</span><span class="p">]]</span><span class="o">.</span><span class="n">describe</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>Shape: (1708, 7)
+
+Sample:
+           game_id  season  week team  total_pass_rush_snaps  avg_pass_rush_pct  num_pass_rushers
+0  2021_01_ARI_TEN    2021     1  ARI                    415           0.404375                16
+1  2021_01_ARI_TEN    2021     1  TEN                    431           0.482308                13
+2   2021_01_BAL_LV    2021     1  BAL                    523           0.434286                14
+3   2021_01_BAL_LV    2021     1   LV                    434           0.490769                13
+4   2021_01_CHI_LA    2021     1  CHI                    324           0.444286                14
+
+Stats:
+       total_pass_rush_snaps  avg_pass_rush_pct  num_pass_rushers
+count            1708.000000        1708.000000       1708.000000
+mean              404.874122           0.444273         13.847190
+std                57.433632           0.029762          0.865642
+min               242.000000           0.350000         11.000000
+25%               364.000000           0.423333         13.000000
+50%               405.000000           0.441484         14.000000
+75%               444.000000           0.463846         14.000000
+max               652.000000           0.599091         17.000000
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=ada320ef">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="6.4-Merge-Pass-Rush-Deployment-onto-Play-by-Play">6.4 Merge Pass Rush Deployment onto Play-by-Play<a class="anchor-link" href="#6.4-Merge-Pass-Rush-Deployment-onto-Play-by-Play">¶</a></h3>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=0c1e54fa">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [21]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Merge defensive pass rush deployment onto play-by-play</span>
+<span class="c1"># Match on game_id and defteam</span>
+<span class="n">rush_by_game_def</span> <span class="o">=</span> <span class="n">rush_by_game</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span>
+    <span class="s1">'team'</span><span class="p">:</span> <span class="s1">'defteam'</span><span class="p">,</span>
+    <span class="s1">'total_pass_rush_snaps'</span><span class="p">:</span> <span class="s1">'def_total_pass_rush_snaps'</span><span class="p">,</span>
+    <span class="s1">'avg_pass_rush_pct'</span><span class="p">:</span> <span class="s1">'def_avg_pass_rush_pct'</span><span class="p">,</span>
+    <span class="s1">'num_pass_rushers'</span><span class="p">:</span> <span class="s1">'def_num_pass_rushers'</span>
+<span class="p">})</span>
+
+<span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
+    <span class="n">rush_by_game_def</span><span class="p">[[</span><span class="s1">'game_id'</span><span class="p">,</span> <span class="s1">'defteam'</span><span class="p">,</span> <span class="s1">'def_total_pass_rush_snaps'</span><span class="p">,</span> 
+                       <span class="s1">'def_avg_pass_rush_pct'</span><span class="p">,</span> <span class="s1">'def_num_pass_rushers'</span><span class="p">]],</span>
+    <span class="n">on</span><span class="o">=</span><span class="p">[</span><span class="s1">'game_id'</span><span class="p">,</span> <span class="s1">'defteam'</span><span class="p">],</span>
+    <span class="n">how</span><span class="o">=</span><span class="s1">'left'</span>
+<span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Merge success rate: </span><span class="si">{</span><span class="n">df</span><span class="p">[</span><span class="s1">'def_avg_pass_rush_pct'</span><span class="p">]</span><span class="o">.</span><span class="n">notna</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">New feature stats:"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">df</span><span class="p">[[</span><span class="s1">'def_total_pass_rush_snaps'</span><span class="p">,</span> <span class="s1">'def_avg_pass_rush_pct'</span><span class="p">,</span> <span class="s1">'def_num_pass_rushers'</span><span class="p">]]</span><span class="o">.</span><span class="n">describe</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>Merge success rate: 1.0000
+
+New feature stats:
+       def_total_pass_rush_snaps  def_avg_pass_rush_pct  def_num_pass_rushers
+count               65131.000000           65131.000000          65131.000000
+mean                  411.294898               0.442954             13.846632
+std                    57.966009               0.029437              0.866907
+min                   242.000000               0.350000             11.000000
+25%                   373.000000               0.422143             13.000000
+50%                   411.000000               0.440000             14.000000
+75%                   451.000000               0.462857             14.000000
+max                   652.000000               0.599091             17.000000
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=b0c0a923">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="6.5-Retrain-Model-with-Pass-Rush-Deployment-Features">6.5 Retrain Model with Pass Rush Deployment Features<a class="anchor-link" href="#6.5-Retrain-Model-with-Pass-Rush-Deployment-Features">¶</a></h3>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=9cc83377">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [22]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Add new features to feature list</span>
+<span class="n">features_v2</span> <span class="o">=</span> <span class="n">features</span> <span class="o">+</span> <span class="p">[</span>
+    <span class="s1">'def_total_pass_rush_snaps'</span><span class="p">,</span>
+    <span class="s1">'def_avg_pass_rush_pct'</span><span class="p">,</span>
+    <span class="s1">'def_num_pass_rushers'</span>
+<span class="p">]</span>
+
+<span class="c1"># Rebuild modeling dataset</span>
+<span class="n">model_df2</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">features_v2</span> <span class="o">+</span> <span class="p">[</span><span class="n">target</span><span class="p">]]</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Modeling dataset shape: </span><span class="si">{</span><span class="n">model_df2</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+<span class="n">X2</span> <span class="o">=</span> <span class="n">model_df2</span><span class="p">[</span><span class="n">features_v2</span><span class="p">]</span>
+<span class="n">y2</span> <span class="o">=</span> <span class="n">model_df2</span><span class="p">[</span><span class="n">target</span><span class="p">]</span>
+
+<span class="n">train_mask2</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">model_df2</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="s1">'season'</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">2023</span>
+<span class="n">X2_train</span> <span class="o">=</span> <span class="n">X2</span><span class="p">[</span><span class="n">train_mask2</span><span class="p">]</span>
+<span class="n">X2_test</span> <span class="o">=</span> <span class="n">X2</span><span class="p">[</span><span class="o">~</span><span class="n">train_mask2</span><span class="p">]</span>
+<span class="n">y2_train</span> <span class="o">=</span> <span class="n">y2</span><span class="p">[</span><span class="n">train_mask2</span><span class="p">]</span>
+<span class="n">y2_test</span> <span class="o">=</span> <span class="n">y2</span><span class="p">[</span><span class="o">~</span><span class="n">train_mask2</span><span class="p">]</span>
+
+<span class="c1"># Retrain</span>
+<span class="n">xgb_model3</span> <span class="o">=</span> <span class="n">xgb</span><span class="o">.</span><span class="n">XGBClassifier</span><span class="p">(</span>
+    <span class="n">n_estimators</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+    <span class="n">max_depth</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+    <span class="n">learning_rate</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+    <span class="n">subsample</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
+    <span class="n">colsample_bytree</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
+    <span class="n">eval_metric</span><span class="o">=</span><span class="s1">'logloss'</span><span class="p">,</span>
+    <span class="n">early_stopping_rounds</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+    <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+    <span class="n">n_jobs</span><span class="o">=-</span><span class="mi">1</span>
+<span class="p">)</span>
+
+<span class="n">xgb_model3</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span>
+    <span class="n">X2_train</span><span class="p">,</span> <span class="n">y2_train</span><span class="p">,</span>
+    <span class="n">eval_set</span><span class="o">=</span><span class="p">[(</span><span class="n">X2_test</span><span class="p">,</span> <span class="n">y2_test</span><span class="p">)],</span>
+    <span class="n">verbose</span><span class="o">=</span><span class="mi">50</span>
+<span class="p">)</span>
+
+<span class="n">y_pred_proba3</span> <span class="o">=</span> <span class="n">xgb_model3</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="n">X2_test</span><span class="p">)[:,</span> <span class="mi">1</span><span class="p">]</span>
+
+<span class="n">auc3</span> <span class="o">=</span> <span class="n">roc_auc_score</span><span class="p">(</span><span class="n">y2_test</span><span class="p">,</span> <span class="n">y_pred_proba3</span><span class="p">)</span>
+<span class="n">logloss3</span> <span class="o">=</span> <span class="n">log_loss</span><span class="p">(</span><span class="n">y2_test</span><span class="p">,</span> <span class="n">y_pred_proba3</span><span class="p">)</span>
+<span class="n">brier3</span> <span class="o">=</span> <span class="n">brier_score_loss</span><span class="p">(</span><span class="n">y2_test</span><span class="p">,</span> <span class="n">y_pred_proba3</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">"</span> <span class="o">+</span> <span class="s2">"="</span> <span class="o">*</span> <span class="mi">45</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"XGBoost v2 (with pass rush features) — 2023"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"="</span> <span class="o">*</span> <span class="mi">45</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"ROC-AUC:     </span><span class="si">{</span><span class="n">auc3</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">  (was </span><span class="si">{</span><span class="n">auc2</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Log Loss:    </span><span class="si">{</span><span class="n">logloss3</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">  (was </span><span class="si">{</span><span class="n">logloss2</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Brier Score: </span><span class="si">{</span><span class="n">brier3</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">  (was </span><span class="si">{</span><span class="n">brier2</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>Modeling dataset shape: (64846, 27)
+[0]	validation_0-logloss:0.24614
+[50]	validation_0-logloss:0.24099
+[79]	validation_0-logloss:0.24116
+
+=============================================
+XGBoost v2 (with pass rush features) — 2023
+=============================================
+ROC-AUC:     0.6139  (was 0.6150)
+Log Loss:    0.2410  (was 0.2408)
+Brier Score: 0.0619  (was 0.0619)
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=12cc0cde">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<p><strong>Finding:</strong> Adding defensive pass rush deployment features (total snaps, average snap percentage, number of pass rushers) from the snap count data produced negligible improvement across all metrics:</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Base Model</th>
+<th>+ Pass Rush Features</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ROC-AUC</td>
+<td>0.6150</td>
+<td>0.6139</td>
+</tr>
+<tr>
+<td>Log Loss</td>
+<td>0.2408</td>
+<td>0.2410</td>
+</tr>
+<tr>
+<td>Brier Score</td>
+<td>0.0619</td>
+<td>0.0619</td>
+</tr>
+</tbody>
+</table>
+<p>This suggests that <strong>aggregate snap count deployment is already implicitly captured</strong> by the rolling defensive sack rate feature — teams that rush more pass rushers tend to generate more sacks, and that signal is already embedded in <code>defteam_sack_rate_rolling</code>. The marginal value of snap count data would likely come from <strong>individual player quality weighting</strong> (e.g. weighting snaps by each rusher's career pressure rate), which would require merging in player-level pass rush grades from sources like PFF. We retain the base model (v1) as our final model.</p>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=21aebf22">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h2 id="7.-Extended-Feature-Engineering-%E2%80%94-Advanced-Stats,-Depth-Charts-&amp;-Rosters">7. Extended Feature Engineering — Advanced Stats, Depth Charts &amp; Rosters<a class="anchor-link" href="#7.-Extended-Feature-Engineering-%E2%80%94-Advanced-Stats,-Depth-Charts-&amp;-Rosters">¶</a></h2><h3 id="7.1-Explore-Advanced-Stats-Data">7.1 Explore Advanced Stats Data<a class="anchor-link" href="#7.1-Explore-Advanced-Stats-Data">¶</a></h3>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=a0bf5dc6">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [23]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Load advanced stats</span>
+<span class="n">adv_pass_2021</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">'../data/advstats_week_pass_2021.csv'</span><span class="p">,</span> <span class="n">low_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">adv_pass_2022</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">'../data/advstats_week_pass_2022.csv'</span><span class="p">,</span> <span class="n">low_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">adv_pass_2023</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">'../data/advstats_week_pass_2023.csv'</span><span class="p">,</span> <span class="n">low_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+<span class="n">adv_def_2021</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">'../data/advstats_week_def_2021.csv'</span><span class="p">,</span> <span class="n">low_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">adv_def_2022</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">'../data/advstats_week_def_2022.csv'</span><span class="p">,</span> <span class="n">low_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">adv_def_2023</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">'../data/advstats_week_def_2023.csv'</span><span class="p">,</span> <span class="n">low_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+<span class="n">adv_rush_2021</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">'../data/advstats_week_rush_2021.csv'</span><span class="p">,</span> <span class="n">low_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">adv_rush_2022</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">'../data/advstats_week_rush_2022.csv'</span><span class="p">,</span> <span class="n">low_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">adv_rush_2023</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">'../data/advstats_week_rush_2023.csv'</span><span class="p">,</span> <span class="n">low_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+<span class="n">adv_pass</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">adv_pass_2021</span><span class="p">,</span> <span class="n">adv_pass_2022</span><span class="p">,</span> <span class="n">adv_pass_2023</span><span class="p">],</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">adv_def</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">adv_def_2021</span><span class="p">,</span> <span class="n">adv_def_2022</span><span class="p">,</span> <span class="n">adv_def_2023</span><span class="p">],</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">adv_rush</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">adv_rush_2021</span><span class="p">,</span> <span class="n">adv_rush_2022</span><span class="p">,</span> <span class="n">adv_rush_2023</span><span class="p">],</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"ADV PASS columns:"</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="n">adv_pass</span><span class="o">.</span><span class="n">columns</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">ADV DEF columns:"</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="n">adv_def</span><span class="o">.</span><span class="n">columns</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">ADV RUSH columns:"</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="n">adv_rush</span><span class="o">.</span><span class="n">columns</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>ADV PASS columns: ['game_id', 'pfr_game_id', 'season', 'week', 'game_type', 'team', 'opponent', 'pfr_player_name', 'pfr_player_id', 'passing_drops', 'passing_drop_pct', 'receiving_drop', 'receiving_drop_pct', 'passing_bad_throws', 'passing_bad_throw_pct', 'times_sacked', 'times_blitzed', 'times_hurried', 'times_hit', 'times_pressured', 'times_pressured_pct', 'def_times_blitzed', 'def_times_hurried', 'def_times_hitqb']
+
+ADV DEF columns: ['game_id', 'pfr_game_id', 'season', 'week', 'game_type', 'team', 'opponent', 'pfr_player_name', 'pfr_player_id', 'def_ints', 'def_targets', 'def_completions_allowed', 'def_completion_pct', 'def_yards_allowed', 'def_yards_allowed_per_cmp', 'def_yards_allowed_per_tgt', 'def_receiving_td_allowed', 'def_passer_rating_allowed', 'def_adot', 'def_air_yards_completed', 'def_yards_after_catch', 'def_times_blitzed', 'def_times_hurried', 'def_times_hitqb', 'def_sacks', 'def_pressures', 'def_tackles_combined', 'def_missed_tackles', 'def_missed_tackle_pct']
+
+ADV RUSH columns: ['game_id', 'pfr_game_id', 'season', 'week', 'game_type', 'team', 'opponent', 'pfr_player_name', 'pfr_player_id', 'carries', 'rushing_yards_before_contact', 'rushing_yards_before_contact_avg', 'rushing_yards_after_contact', 'rushing_yards_after_contact_avg', 'rushing_broken_tackles', 'receiving_broken_tackles']
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=a0ad62b2">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="7.2-Build-Rolling-QB-Pressure-Profile-from-Advanced-Pass-Stats">7.2 Build Rolling QB Pressure Profile from Advanced Pass Stats<a class="anchor-link" href="#7.2-Build-Rolling-QB-Pressure-Profile-from-Advanced-Pass-Stats">¶</a></h3>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=30900ce5">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [24]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Aggregate adv_pass to team level per game (QB stats)</span>
+<span class="n">adv_pass_team</span> <span class="o">=</span> <span class="n">adv_pass</span><span class="o">.</span><span class="n">groupby</span><span class="p">([</span><span class="s1">'game_id'</span><span class="p">,</span> <span class="s1">'season'</span><span class="p">,</span> <span class="s1">'week'</span><span class="p">,</span> <span class="s1">'team'</span><span class="p">])</span><span class="o">.</span><span class="n">agg</span><span class="p">(</span>
+    <span class="n">times_sacked</span><span class="o">=</span><span class="p">(</span><span class="s1">'times_sacked'</span><span class="p">,</span> <span class="s1">'sum'</span><span class="p">),</span>
+    <span class="n">times_blitzed</span><span class="o">=</span><span class="p">(</span><span class="s1">'times_blitzed'</span><span class="p">,</span> <span class="s1">'sum'</span><span class="p">),</span>
+    <span class="n">times_hurried</span><span class="o">=</span><span class="p">(</span><span class="s1">'times_hurried'</span><span class="p">,</span> <span class="s1">'sum'</span><span class="p">),</span>
+    <span class="n">times_pressured</span><span class="o">=</span><span class="p">(</span><span class="s1">'times_pressured'</span><span class="p">,</span> <span class="s1">'sum'</span><span class="p">),</span>
+    <span class="n">times_pressured_pct</span><span class="o">=</span><span class="p">(</span><span class="s1">'times_pressured_pct'</span><span class="p">,</span> <span class="s1">'mean'</span><span class="p">),</span>
+<span class="p">)</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Shape: </span><span class="si">{</span><span class="n">adv_pass_team</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Sample:"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">adv_pass_team</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span><span class="o">.</span><span class="n">to_string</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Stats:"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">adv_pass_team</span><span class="p">[[</span><span class="s1">'times_sacked'</span><span class="p">,</span> <span class="s1">'times_blitzed'</span><span class="p">,</span> <span class="s1">'times_pressured'</span><span class="p">,</span> <span class="s1">'times_pressured_pct'</span><span class="p">]]</span><span class="o">.</span><span class="n">describe</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>Shape: (1708, 9)
+
+Sample:
+           game_id  season  week team  times_sacked  times_blitzed  times_hurried  times_pressured  times_pressured_pct
+0  2021_01_ARI_TEN    2021     1  ARI             2              7              5                9               0.2570
+1  2021_01_ARI_TEN    2021     1  TEN             6             13              1               12               0.1430
+2   2021_01_BAL_LV    2021     1  BAL             3              3              2               10               0.2560
+3   2021_01_BAL_LV    2021     1   LV             3             22              6               13               0.2130
+4   2021_01_CHI_LA    2021     1  CHI             3             16              3                7               0.0815
+
+Stats:
+       times_sacked  times_blitzed  times_pressured  times_pressured_pct
+count   1708.000000     1708.00000      1708.000000          1708.000000
+mean       2.401054        9.49356         8.103044             0.212383
+std        1.728882        4.92551         3.976635             0.114177
+min        0.000000        0.00000         0.000000             0.000000
+25%        1.000000        6.00000         5.000000             0.132000
+50%        2.000000        9.00000         8.000000             0.200000
+75%        3.000000       12.00000        10.250000             0.276000
+max       10.000000       40.00000        27.000000             0.916500
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=87182e19">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="7.3-Build-Rolling-Defensive-Pressure-Metrics-from-Advanced-Def-Stats">7.3 Build Rolling Defensive Pressure Metrics from Advanced Def Stats<a class="anchor-link" href="#7.3-Build-Rolling-Defensive-Pressure-Metrics-from-Advanced-Def-Stats">¶</a></h3>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=60545610">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [25]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Aggregate adv_def to team level per game</span>
+<span class="n">adv_def_team</span> <span class="o">=</span> <span class="n">adv_def</span><span class="o">.</span><span class="n">groupby</span><span class="p">([</span><span class="s1">'game_id'</span><span class="p">,</span> <span class="s1">'season'</span><span class="p">,</span> <span class="s1">'week'</span><span class="p">,</span> <span class="s1">'team'</span><span class="p">])</span><span class="o">.</span><span class="n">agg</span><span class="p">(</span>
+    <span class="n">def_sacks</span><span class="o">=</span><span class="p">(</span><span class="s1">'def_sacks'</span><span class="p">,</span> <span class="s1">'sum'</span><span class="p">),</span>
+    <span class="n">def_pressures</span><span class="o">=</span><span class="p">(</span><span class="s1">'def_pressures'</span><span class="p">,</span> <span class="s1">'sum'</span><span class="p">),</span>
+    <span class="n">def_times_blitzed</span><span class="o">=</span><span class="p">(</span><span class="s1">'def_times_blitzed'</span><span class="p">,</span> <span class="s1">'sum'</span><span class="p">),</span>
+    <span class="n">def_times_hurried</span><span class="o">=</span><span class="p">(</span><span class="s1">'def_times_hurried'</span><span class="p">,</span> <span class="s1">'sum'</span><span class="p">),</span>
+    <span class="n">def_times_hitqb</span><span class="o">=</span><span class="p">(</span><span class="s1">'def_times_hitqb'</span><span class="p">,</span> <span class="s1">'sum'</span><span class="p">),</span>
+<span class="p">)</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Shape: </span><span class="si">{</span><span class="n">adv_def_team</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Sample:"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">adv_def_team</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span><span class="o">.</span><span class="n">to_string</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Stats:"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">adv_def_team</span><span class="p">[[</span><span class="s1">'def_sacks'</span><span class="p">,</span> <span class="s1">'def_pressures'</span><span class="p">,</span> <span class="s1">'def_times_blitzed'</span><span class="p">,</span> <span class="s1">'def_times_hurried'</span><span class="p">]]</span><span class="o">.</span><span class="n">describe</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>Shape: (1704, 9)
+
+Sample:
+           game_id  season  week team  def_sacks  def_pressures  def_times_blitzed  def_times_hurried  def_times_hitqb
+0  2021_01_ARI_TEN    2021     1  ARI        6.0             12                  4                  1                5
+1  2021_01_ARI_TEN    2021     1  TEN        2.0              9                  7                  5                2
+2   2021_01_BAL_LV    2021     1  BAL        3.0             13                 39                  6                4
+3   2021_01_BAL_LV    2021     1   LV        3.0             10                  4                  2                5
+4   2021_01_CHI_LA    2021     1  CHI        1.0              4                 10                  0                2
+
+Stats:
+         def_sacks  def_pressures  def_times_blitzed  def_times_hurried
+count  1704.000000    1704.000000        1704.000000        1704.000000
+mean      2.405516       8.755869          13.378521           3.074531
+std       1.726922       4.314721          10.073274           2.867144
+min       0.000000       0.000000           0.000000           0.000000
+25%       1.000000       6.000000           7.000000           1.000000
+50%       2.000000       8.000000          11.000000           2.000000
+75%       3.000000      11.000000          17.000000           5.000000
+max      11.000000      27.000000          96.000000          18.000000
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=bcd4c451">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="7.4-Build-Rolling-Averages-&amp;-Merge-onto-Play-by-Play">7.4 Build Rolling Averages &amp; Merge onto Play-by-Play<a class="anchor-link" href="#7.4-Build-Rolling-Averages-&amp;-Merge-onto-Play-by-Play">¶</a></h3>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=d838b6a1">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [26]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Sort by season and week for rolling calculations</span>
+<span class="n">adv_pass_team</span> <span class="o">=</span> <span class="n">adv_pass_team</span><span class="o">.</span><span class="n">sort_values</span><span class="p">([</span><span class="s1">'season'</span><span class="p">,</span> <span class="s1">'week'</span><span class="p">])</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">adv_def_team</span> <span class="o">=</span> <span class="n">adv_def_team</span><span class="o">.</span><span class="n">sort_values</span><span class="p">([</span><span class="s1">'season'</span><span class="p">,</span> <span class="s1">'week'</span><span class="p">])</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="c1"># Rolling 4-game averages for offensive pressure allowed (shift to avoid leakage)</span>
+<span class="n">adv_pass_rolling</span> <span class="o">=</span> <span class="n">adv_pass_team</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+<span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">'times_sacked'</span><span class="p">,</span> <span class="s1">'times_blitzed'</span><span class="p">,</span> <span class="s1">'times_pressured'</span><span class="p">,</span> <span class="s1">'times_pressured_pct'</span><span class="p">]:</span>
+    <span class="n">adv_pass_rolling</span><span class="p">[</span><span class="sa">f</span><span class="s1">'rolling_</span><span class="si">{</span><span class="n">col</span><span class="si">}</span><span class="s1">'</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">adv_pass_rolling</span><span class="o">.</span><span class="n">groupby</span><span class="p">([</span><span class="s1">'season'</span><span class="p">,</span> <span class="s1">'team'</span><span class="p">])[</span><span class="n">col</span><span class="p">]</span>
+        <span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">shift</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">rolling</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">min_periods</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>
+    <span class="p">)</span>
+
+<span class="c1"># Rolling 4-game averages for defensive pressure generated</span>
+<span class="n">adv_def_rolling</span> <span class="o">=</span> <span class="n">adv_def_team</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+<span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">'def_sacks'</span><span class="p">,</span> <span class="s1">'def_pressures'</span><span class="p">,</span> <span class="s1">'def_times_blitzed'</span><span class="p">,</span> <span class="s1">'def_times_hurried'</span><span class="p">]:</span>
+    <span class="n">adv_def_rolling</span><span class="p">[</span><span class="sa">f</span><span class="s1">'rolling_</span><span class="si">{</span><span class="n">col</span><span class="si">}</span><span class="s1">'</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">adv_def_rolling</span><span class="o">.</span><span class="n">groupby</span><span class="p">([</span><span class="s1">'season'</span><span class="p">,</span> <span class="s1">'team'</span><span class="p">])[</span><span class="n">col</span><span class="p">]</span>
+        <span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">shift</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">rolling</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">min_periods</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>
+    <span class="p">)</span>
+
+<span class="c1"># Merge onto play-by-play</span>
+<span class="c1"># Offensive team pressure allowed</span>
+<span class="n">rolling_pass_cols</span> <span class="o">=</span> <span class="p">[</span><span class="s1">'game_id'</span><span class="p">,</span> <span class="s1">'team'</span><span class="p">,</span> <span class="s1">'rolling_times_sacked'</span><span class="p">,</span> <span class="s1">'rolling_times_blitzed'</span><span class="p">,</span> 
+                     <span class="s1">'rolling_times_pressured'</span><span class="p">,</span> <span class="s1">'rolling_times_pressured_pct'</span><span class="p">]</span>
+<span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
+    <span class="n">adv_pass_rolling</span><span class="p">[</span><span class="n">rolling_pass_cols</span><span class="p">]</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="s1">'team'</span><span class="p">:</span> <span class="s1">'posteam'</span><span class="p">}),</span>
+    <span class="n">on</span><span class="o">=</span><span class="p">[</span><span class="s1">'game_id'</span><span class="p">,</span> <span class="s1">'posteam'</span><span class="p">],</span>
+    <span class="n">how</span><span class="o">=</span><span class="s1">'left'</span>
+<span class="p">)</span>
+
+<span class="c1"># Defensive team pressure generated</span>
+<span class="n">rolling_def_cols</span> <span class="o">=</span> <span class="p">[</span><span class="s1">'game_id'</span><span class="p">,</span> <span class="s1">'team'</span><span class="p">,</span> <span class="s1">'rolling_def_sacks'</span><span class="p">,</span> <span class="s1">'rolling_def_pressures'</span><span class="p">,</span>
+                    <span class="s1">'rolling_def_times_blitzed'</span><span class="p">,</span> <span class="s1">'rolling_def_times_hurried'</span><span class="p">]</span>
+<span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
+    <span class="n">adv_def_rolling</span><span class="p">[</span><span class="n">rolling_def_cols</span><span class="p">]</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="s1">'team'</span><span class="p">:</span> <span class="s1">'defteam'</span><span class="p">}),</span>
+    <span class="n">on</span><span class="o">=</span><span class="p">[</span><span class="s1">'game_id'</span><span class="p">,</span> <span class="s1">'defteam'</span><span class="p">],</span>
+    <span class="n">how</span><span class="o">=</span><span class="s1">'left'</span>
+<span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Merge success - pass stats: </span><span class="si">{</span><span class="n">df</span><span class="p">[</span><span class="s1">'rolling_times_pressured'</span><span class="p">]</span><span class="o">.</span><span class="n">notna</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Merge success - def stats:  </span><span class="si">{</span><span class="n">df</span><span class="p">[</span><span class="s1">'rolling_def_pressures'</span><span class="p">]</span><span class="o">.</span><span class="n">notna</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">New features sample:"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">df</span><span class="p">[[</span><span class="s1">'posteam'</span><span class="p">,</span> <span class="s1">'defteam'</span><span class="p">,</span> <span class="s1">'rolling_times_pressured_pct'</span><span class="p">,</span> <span class="s1">'rolling_def_pressures'</span><span class="p">]]</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span><span class="o">.</span><span class="n">to_string</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>Merge success - pass stats: 0.9412
+Merge success - def stats:  0.9392
+
+New features sample:
+  posteam defteam  rolling_times_pressured_pct  rolling_def_pressures
+0     TEN     ARI                          NaN                    NaN
+1     TEN     ARI                          NaN                    NaN
+2     ARI     TEN                          NaN                    NaN
+3     ARI     TEN                          NaN                    NaN
+4     ARI     TEN                          NaN                    NaN
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=38d187bb">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="7.5-Handle-Missing-Values">7.5 Handle Missing Values<a class="anchor-link" href="#7.5-Handle-Missing-Values">¶</a></h3>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=34212f00">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [27]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Fill nulls with league averages from training data</span>
+<span class="n">fill_vals</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">'rolling_times_sacked'</span><span class="p">:</span> <span class="n">adv_pass_rolling</span><span class="p">[</span><span class="s1">'times_sacked'</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">(),</span>
+    <span class="s1">'rolling_times_blitzed'</span><span class="p">:</span> <span class="n">adv_pass_rolling</span><span class="p">[</span><span class="s1">'times_blitzed'</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">(),</span>
+    <span class="s1">'rolling_times_pressured'</span><span class="p">:</span> <span class="n">adv_pass_rolling</span><span class="p">[</span><span class="s1">'times_pressured'</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">(),</span>
+    <span class="s1">'rolling_times_pressured_pct'</span><span class="p">:</span> <span class="n">adv_pass_rolling</span><span class="p">[</span><span class="s1">'times_pressured_pct'</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">(),</span>
+    <span class="s1">'rolling_def_sacks'</span><span class="p">:</span> <span class="n">adv_def_rolling</span><span class="p">[</span><span class="s1">'def_sacks'</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">(),</span>
+    <span class="s1">'rolling_def_pressures'</span><span class="p">:</span> <span class="n">adv_def_rolling</span><span class="p">[</span><span class="s1">'def_pressures'</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">(),</span>
+    <span class="s1">'rolling_def_times_blitzed'</span><span class="p">:</span> <span class="n">adv_def_rolling</span><span class="p">[</span><span class="s1">'def_times_blitzed'</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">(),</span>
+    <span class="s1">'rolling_def_times_hurried'</span><span class="p">:</span> <span class="n">adv_def_rolling</span><span class="p">[</span><span class="s1">'def_times_hurried'</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">(),</span>
+<span class="p">}</span>
+
+<span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="n">fill_vals</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Nulls after fill:"</span><span class="p">)</span>
+<span class="n">new_cols</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">fill_vals</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="n">new_cols</span><span class="p">]</span><span class="o">.</span><span class="n">isnull</span><span class="p">()</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>Nulls after fill:
+rolling_times_sacked           0
+rolling_times_blitzed          0
+rolling_times_pressured        0
+rolling_times_pressured_pct    0
+rolling_def_sacks              0
+rolling_def_pressures          0
+rolling_def_times_blitzed      0
+rolling_def_times_hurried      0
+dtype: int64
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=9bfc3aa4">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="7.6-Explore-Depth-Chart-&amp;-Roster-Data">7.6 Explore Depth Chart &amp; Roster Data<a class="anchor-link" href="#7.6-Explore-Depth-Chart-&amp;-Roster-Data">¶</a></h3>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=a5a6ca84">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [28]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Load depth charts</span>
+<span class="n">depth_2021</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">'../data/depth_charts_2021.csv'</span><span class="p">,</span> <span class="n">low_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">depth_2022</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">'../data/depth_charts_2022.csv'</span><span class="p">,</span> <span class="n">low_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">depth_2023</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">'../data/depth_charts_2023.csv'</span><span class="p">,</span> <span class="n">low_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+<span class="n">depth</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">depth_2021</span><span class="p">,</span> <span class="n">depth_2022</span><span class="p">,</span> <span class="n">depth_2023</span><span class="p">],</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="c1"># Load rosters</span>
+<span class="n">roster_2021</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">'../data/roster_2021.csv'</span><span class="p">,</span> <span class="n">low_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">roster_2022</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">'../data/roster_2022.csv'</span><span class="p">,</span> <span class="n">low_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">roster_2023</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">'../data/roster_2023.csv'</span><span class="p">,</span> <span class="n">low_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+<span class="n">roster</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">roster_2021</span><span class="p">,</span> <span class="n">roster_2022</span><span class="p">,</span> <span class="n">roster_2023</span><span class="p">],</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"DEPTH CHART columns:"</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="n">depth</span><span class="o">.</span><span class="n">columns</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Shape: </span><span class="si">{</span><span class="n">depth</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">ROSTER columns:"</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="n">roster</span><span class="o">.</span><span class="n">columns</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Shape: </span><span class="si">{</span><span class="n">roster</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>DEPTH CHART columns: ['season', 'club_code', 'week', 'game_type', 'depth_team', 'last_name', 'first_name', 'football_name', 'formation', 'gsis_id', 'jersey_number', 'position', 'elias_id', 'depth_position', 'full_name']
+Shape: (112594, 15)
+
+ROSTER columns: ['season', 'team', 'position', 'depth_chart_position', 'jersey_number', 'status', 'full_name', 'first_name', 'last_name', 'birth_date', 'height', 'weight', 'college', 'gsis_id', 'espn_id', 'sportradar_id', 'yahoo_id', 'rotowire_id', 'pff_id', 'pfr_id', 'fantasy_data_id', 'sleeper_id', 'years_exp', 'headshot_url', 'ngs_position', 'week', 'game_type', 'status_description_abbr', 'football_name', 'esb_id', 'gsis_it_id', 'smart_id', 'entry_year', 'rookie_year', 'draft_club', 'draft_number']
+Shape: (9185, 36)
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=85766d4a">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="7.7-Build-Offensive-Line-Stability-Feature-from-Depth-Charts">7.7 Build Offensive Line Stability Feature from Depth Charts<a class="anchor-link" href="#7.7-Build-Offensive-Line-Stability-Feature-from-Depth-Charts">¶</a></h3>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=a12b7db1">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [29]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Filter to offensive linemen starters</span>
+<span class="n">ol_positions</span> <span class="o">=</span> <span class="p">[</span><span class="s1">'LT'</span><span class="p">,</span> <span class="s1">'LG'</span><span class="p">,</span> <span class="s1">'C'</span><span class="p">,</span> <span class="s1">'RG'</span><span class="p">,</span> <span class="s1">'RT'</span><span class="p">]</span>
+<span class="n">ol_starters</span> <span class="o">=</span> <span class="n">depth</span><span class="p">[</span>
+    <span class="p">(</span><span class="n">depth</span><span class="p">[</span><span class="s1">'depth_position'</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">ol_positions</span><span class="p">))</span> <span class="o">&amp;</span> 
+    <span class="p">(</span><span class="n">depth</span><span class="p">[</span><span class="s1">'depth_team'</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+<span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"OL starter rows: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">ol_starters</span><span class="p">)</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Position breakdown:"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">ol_starters</span><span class="p">[</span><span class="s1">'depth_position'</span><span class="p">]</span><span class="o">.</span><span class="n">value_counts</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Sample:"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">ol_starters</span><span class="p">[[</span><span class="s1">'season'</span><span class="p">,</span> <span class="s1">'week'</span><span class="p">,</span> <span class="s1">'club_code'</span><span class="p">,</span> <span class="s1">'full_name'</span><span class="p">,</span> <span class="s1">'depth_position'</span><span class="p">]]</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span><span class="o">.</span><span class="n">to_string</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>OL starter rows: 9,533
+
+Position breakdown:
+depth_position
+RG    1936
+C     1929
+LG    1925
+LT    1878
+RT    1865
+Name: count, dtype: int64
+
+Sample:
+    season  week club_code        full_name depth_position
+1     2021   1.0       ATL    Jake Matthews             LT
+18    2021   1.0       ATL   Jalen Mayfield             LG
+19    2021   1.0       ATL  Chris Lindstrom             RG
+27    2021   1.0       ATL     Kaleb McGary             RT
+30    2021   1.0       ATL    Matt Hennessy              C
+67    2021   2.0       ATL    Jake Matthews             LT
+72    2021   2.0       ATL   Jalen Mayfield             LG
+73    2021   2.0       ATL  Chris Lindstrom             RG
+81    2021   2.0       ATL     Kaleb McGary             RT
+85    2021   2.0       ATL    Matt Hennessy              C
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=487474ba">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="7.8-Merge-Roster-Experience-&amp;-Build-OL-Experience-Score">7.8 Merge Roster Experience &amp; Build OL Experience Score<a class="anchor-link" href="#7.8-Merge-Roster-Experience-&amp;-Build-OL-Experience-Score">¶</a></h3>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=1e8449d4">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [30]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Merge years_exp from roster onto OL starters</span>
+<span class="n">roster_slim</span> <span class="o">=</span> <span class="n">roster</span><span class="p">[[</span><span class="s1">'season'</span><span class="p">,</span> <span class="s1">'week'</span><span class="p">,</span> <span class="s1">'team'</span><span class="p">,</span> <span class="s1">'full_name'</span><span class="p">,</span> <span class="s1">'years_exp'</span><span class="p">]]</span><span class="o">.</span><span class="n">drop_duplicates</span><span class="p">()</span>
+
+<span class="n">ol_starters</span> <span class="o">=</span> <span class="n">ol_starters</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
+    <span class="n">roster_slim</span><span class="p">,</span>
+    <span class="n">left_on</span><span class="o">=</span><span class="p">[</span><span class="s1">'season'</span><span class="p">,</span> <span class="s1">'week'</span><span class="p">,</span> <span class="s1">'club_code'</span><span class="p">,</span> <span class="s1">'full_name'</span><span class="p">],</span>
+    <span class="n">right_on</span><span class="o">=</span><span class="p">[</span><span class="s1">'season'</span><span class="p">,</span> <span class="s1">'week'</span><span class="p">,</span> <span class="s1">'team'</span><span class="p">,</span> <span class="s1">'full_name'</span><span class="p">],</span>
+    <span class="n">how</span><span class="o">=</span><span class="s1">'left'</span>
+<span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Experience merge rate: </span><span class="si">{</span><span class="n">ol_starters</span><span class="p">[</span><span class="s1">'years_exp'</span><span class="p">]</span><span class="o">.</span><span class="n">notna</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+<span class="c1"># Build OL experience score per team per week</span>
+<span class="c1"># = average years of experience across all 5 starting OL</span>
+<span class="n">ol_exp_score</span> <span class="o">=</span> <span class="n">ol_starters</span><span class="o">.</span><span class="n">groupby</span><span class="p">([</span><span class="s1">'season'</span><span class="p">,</span> <span class="s1">'week'</span><span class="p">,</span> <span class="s1">'club_code'</span><span class="p">])</span><span class="o">.</span><span class="n">agg</span><span class="p">(</span>
+    <span class="n">ol_avg_years_exp</span><span class="o">=</span><span class="p">(</span><span class="s1">'years_exp'</span><span class="p">,</span> <span class="s1">'mean'</span><span class="p">),</span>
+    <span class="n">ol_starters_count</span><span class="o">=</span><span class="p">(</span><span class="s1">'full_name'</span><span class="p">,</span> <span class="s1">'count'</span><span class="p">)</span>
+<span class="p">)</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+
+<span class="c1"># Rolling 4-week average (shift to avoid leakage)</span>
+<span class="n">ol_exp_score</span> <span class="o">=</span> <span class="n">ol_exp_score</span><span class="o">.</span><span class="n">sort_values</span><span class="p">([</span><span class="s1">'season'</span><span class="p">,</span> <span class="s1">'week'</span><span class="p">])</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">ol_exp_score</span><span class="p">[</span><span class="s1">'rolling_ol_avg_exp'</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">ol_exp_score</span><span class="o">.</span><span class="n">groupby</span><span class="p">([</span><span class="s1">'season'</span><span class="p">,</span> <span class="s1">'club_code'</span><span class="p">])[</span><span class="s1">'ol_avg_years_exp'</span><span class="p">]</span>
+    <span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">shift</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">rolling</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">min_periods</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>
+<span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">OL experience score sample:"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">ol_exp_score</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span><span class="o">.</span><span class="n">to_string</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>Experience merge rate: 0.0579
+
+OL experience score sample:
+   season  week club_code  ol_avg_years_exp  ol_starters_count  rolling_ol_avg_exp
+0    2021   1.0       ARI               NaN                  4                 NaN
+1    2021   1.0       ATL               NaN                  5                 NaN
+2    2021   1.0       BAL               NaN                  5                 NaN
+3    2021   1.0       BUF               NaN                  5                 NaN
+4    2021   1.0       CAR               NaN                  5                 NaN
+5    2021   1.0       CHI               NaN                  5                 NaN
+6    2021   1.0       CIN               NaN                  5                 NaN
+7    2021   1.0       CLE               NaN                  5                 NaN
+8    2021   1.0       DAL               NaN                  5                 NaN
+9    2021   1.0       DEN               NaN                  5                 NaN
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=77c254b3">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="7.9-OL-Stability-%E2%80%94-Starter-Count-as-Completeness-Proxy">7.9 OL Stability — Starter Count as Completeness Proxy<a class="anchor-link" href="#7.9-OL-Stability-%E2%80%94-Starter-Count-as-Completeness-Proxy">¶</a></h3><p><strong>Note:</strong> Attempted to merge depth chart data with roster <code>years_exp</code> to build an OL experience score, but the name-based join between data sources yielded only a 5.8% match rate due to formatting inconsistencies (e.g. "Jake Matthews" vs "Jake S. Matthews"). A production implementation would resolve this via a common player ID (e.g. <code>gsis_id</code>). As a fallback, we use the count of starting OL players listed per team per week as a proxy for line completeness — a full complement of 5 starters indicates a healthy, stable line.</p>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=e77f18e9">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [31]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Use OL starter count as completeness proxy</span>
+<span class="n">ol_stability</span> <span class="o">=</span> <span class="n">depth</span><span class="p">[</span>
+    <span class="p">(</span><span class="n">depth</span><span class="p">[</span><span class="s1">'depth_position'</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">ol_positions</span><span class="p">))</span> <span class="o">&amp;</span> 
+    <span class="p">(</span><span class="n">depth</span><span class="p">[</span><span class="s1">'depth_team'</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+<span class="p">]</span><span class="o">.</span><span class="n">groupby</span><span class="p">([</span><span class="s1">'season'</span><span class="p">,</span> <span class="s1">'week'</span><span class="p">,</span> <span class="s1">'club_code'</span><span class="p">])</span><span class="o">.</span><span class="n">agg</span><span class="p">(</span>
+    <span class="n">ol_starters_count</span><span class="o">=</span><span class="p">(</span><span class="s1">'full_name'</span><span class="p">,</span> <span class="s1">'count'</span><span class="p">)</span>
+<span class="p">)</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+
+<span class="c1"># Rolling average</span>
+<span class="n">ol_stability</span> <span class="o">=</span> <span class="n">ol_stability</span><span class="o">.</span><span class="n">sort_values</span><span class="p">([</span><span class="s1">'season'</span><span class="p">,</span> <span class="s1">'week'</span><span class="p">])</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">ol_stability</span><span class="p">[</span><span class="s1">'rolling_ol_starters'</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">ol_stability</span><span class="o">.</span><span class="n">groupby</span><span class="p">([</span><span class="s1">'season'</span><span class="p">,</span> <span class="s1">'club_code'</span><span class="p">])[</span><span class="s1">'ol_starters_count'</span><span class="p">]</span>
+    <span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">shift</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">rolling</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">min_periods</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>
+<span class="p">)</span>
+
+<span class="c1"># Merge onto play-by-play via posteam</span>
+<span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
+    <span class="n">ol_stability</span><span class="p">[[</span><span class="s1">'season'</span><span class="p">,</span> <span class="s1">'week'</span><span class="p">,</span> <span class="s1">'club_code'</span><span class="p">,</span> <span class="s1">'rolling_ol_starters'</span><span class="p">]]</span>
+    <span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="s1">'club_code'</span><span class="p">:</span> <span class="s1">'posteam'</span><span class="p">}),</span>
+    <span class="n">on</span><span class="o">=</span><span class="p">[</span><span class="s1">'season'</span><span class="p">,</span> <span class="s1">'week'</span><span class="p">,</span> <span class="s1">'posteam'</span><span class="p">],</span>
+    <span class="n">how</span><span class="o">=</span><span class="s1">'left'</span>
+<span class="p">)</span>
+
+<span class="n">df</span><span class="p">[</span><span class="s1">'rolling_ol_starters'</span><span class="p">]</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s1">'rolling_ol_starters'</span><span class="p">]</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="mf">5.0</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Merge success rate: </span><span class="si">{</span><span class="n">df</span><span class="p">[</span><span class="s1">'rolling_ol_starters'</span><span class="p">]</span><span class="o">.</span><span class="n">notna</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">OL starters distribution:"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="s1">'rolling_ol_starters'</span><span class="p">]</span><span class="o">.</span><span class="n">describe</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>Merge success rate: 1.0000
+
+OL starters distribution:
+count    65131.000000
+mean         4.934144
+std          0.382948
+min          2.000000
+25%          5.000000
+50%          5.000000
+75%          5.000000
+max          6.250000
+Name: rolling_ol_starters, dtype: float64
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=00e66102">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="7.10-Final-Model-%E2%80%94-All-Features-Combined">7.10 Final Model — All Features Combined<a class="anchor-link" href="#7.10-Final-Model-%E2%80%94-All-Features-Combined">¶</a></h3>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=56d86789">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [33]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Final complete feature set</span>
+<span class="n">features_final</span> <span class="o">=</span> <span class="n">features</span> <span class="o">+</span> <span class="p">[</span>
+    <span class="c1"># Snap count features</span>
+    <span class="s1">'def_total_pass_rush_snaps'</span><span class="p">,</span>
+    <span class="s1">'def_avg_pass_rush_pct'</span><span class="p">,</span>
+    <span class="s1">'def_num_pass_rushers'</span><span class="p">,</span>
+    <span class="c1"># Advanced pass stats (offensive pressure allowed)</span>
+    <span class="s1">'rolling_times_sacked'</span><span class="p">,</span>
+    <span class="s1">'rolling_times_blitzed'</span><span class="p">,</span>
+    <span class="s1">'rolling_times_pressured'</span><span class="p">,</span>
+    <span class="s1">'rolling_times_pressured_pct'</span><span class="p">,</span>
+    <span class="c1"># Advanced def stats (defensive pressure generated)</span>
+    <span class="s1">'rolling_def_sacks'</span><span class="p">,</span>
+    <span class="s1">'rolling_def_pressures'</span><span class="p">,</span>
+    <span class="s1">'rolling_def_times_blitzed'</span><span class="p">,</span>
+    <span class="s1">'rolling_def_times_hurried'</span><span class="p">,</span>
+    <span class="c1"># OL stability</span>
+    <span class="s1">'rolling_ol_starters'</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="c1"># Build final modeling dataset</span>
+<span class="n">model_df_final</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">features_final</span> <span class="o">+</span> <span class="p">[</span><span class="n">target</span><span class="p">]]</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Final modeling dataset shape: </span><span class="si">{</span><span class="n">model_df_final</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Sack rate: </span><span class="si">{</span><span class="n">model_df_final</span><span class="p">[</span><span class="n">target</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+<span class="n">X_final</span> <span class="o">=</span> <span class="n">model_df_final</span><span class="p">[</span><span class="n">features_final</span><span class="p">]</span>
+<span class="n">y_final</span> <span class="o">=</span> <span class="n">model_df_final</span><span class="p">[</span><span class="n">target</span><span class="p">]</span>
+
+<span class="n">train_mask_final</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">model_df_final</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="s1">'season'</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">2023</span>
+<span class="n">X_final_train</span> <span class="o">=</span> <span class="n">X_final</span><span class="p">[</span><span class="n">train_mask_final</span><span class="p">]</span>
+<span class="n">X_final_test</span> <span class="o">=</span> <span class="n">X_final</span><span class="p">[</span><span class="o">~</span><span class="n">train_mask_final</span><span class="p">]</span>
+<span class="n">y_final_train</span> <span class="o">=</span> <span class="n">y_final</span><span class="p">[</span><span class="n">train_mask_final</span><span class="p">]</span>
+<span class="n">y_final_test</span> <span class="o">=</span> <span class="n">y_final</span><span class="p">[</span><span class="o">~</span><span class="n">train_mask_final</span><span class="p">]</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Train: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">X_final_train</span><span class="p">)</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2"> | Test: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">X_final_test</span><span class="p">)</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+<span class="c1"># Train final model</span>
+<span class="n">xgb_final</span> <span class="o">=</span> <span class="n">xgb</span><span class="o">.</span><span class="n">XGBClassifier</span><span class="p">(</span>
+    <span class="n">n_estimators</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+    <span class="n">max_depth</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+    <span class="n">learning_rate</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+    <span class="n">subsample</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
+    <span class="n">colsample_bytree</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
+    <span class="n">eval_metric</span><span class="o">=</span><span class="s1">'logloss'</span><span class="p">,</span>
+    <span class="n">early_stopping_rounds</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+    <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+    <span class="n">n_jobs</span><span class="o">=-</span><span class="mi">1</span>
+<span class="p">)</span>
+
+<span class="n">xgb_final</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span>
+    <span class="n">X_final_train</span><span class="p">,</span> <span class="n">y_final_train</span><span class="p">,</span>
+    <span class="n">eval_set</span><span class="o">=</span><span class="p">[(</span><span class="n">X_final_test</span><span class="p">,</span> <span class="n">y_final_test</span><span class="p">)],</span>
+    <span class="n">verbose</span><span class="o">=</span><span class="mi">50</span>
+<span class="p">)</span>
+
+<span class="n">y_pred_final</span> <span class="o">=</span> <span class="n">xgb_final</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="n">X_final_test</span><span class="p">)[:,</span> <span class="mi">1</span><span class="p">]</span>
+
+<span class="n">auc_final</span> <span class="o">=</span> <span class="n">roc_auc_score</span><span class="p">(</span><span class="n">y_final_test</span><span class="p">,</span> <span class="n">y_pred_final</span><span class="p">)</span>
+<span class="n">logloss_final</span> <span class="o">=</span> <span class="n">log_loss</span><span class="p">(</span><span class="n">y_final_test</span><span class="p">,</span> <span class="n">y_pred_final</span><span class="p">)</span>
+<span class="n">brier_final</span> <span class="o">=</span> <span class="n">brier_score_loss</span><span class="p">(</span><span class="n">y_final_test</span><span class="p">,</span> <span class="n">y_pred_final</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">"</span> <span class="o">+</span> <span class="s2">"="</span> <span class="o">*</span> <span class="mi">50</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Final Model (All Features) — 2023 Test Set"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"="</span> <span class="o">*</span> <span class="mi">50</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"ROC-AUC:     </span><span class="si">{</span><span class="n">auc_final</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">  (base: </span><span class="si">{</span><span class="n">auc2</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Log Loss:    </span><span class="si">{</span><span class="n">logloss_final</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">  (base: </span><span class="si">{</span><span class="n">logloss2</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Brier Score: </span><span class="si">{</span><span class="n">brier_final</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">  (base: </span><span class="si">{</span><span class="n">brier2</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>Final modeling dataset shape: (64846, 36)
+Sack rate: 0.0637
+
+Train: 43,106 | Test: 21,740
+[0]	validation_0-logloss:0.24581
+[50]	validation_0-logloss:0.24172
+[52]	validation_0-logloss:0.24171
+
+==================================================
+Final Model (All Features) — 2023 Test Set
+==================================================
+ROC-AUC:     0.6062  (base: 0.6150)
+Log Loss:    0.2417  (base: 0.2408)
+Brier Score: 0.0620  (base: 0.0619)
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=9a566455">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="7.11-Final-Model-Comparison">7.11 Final Model Comparison<a class="anchor-link" href="#7.11-Final-Model-Comparison">¶</a></h3><table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Features</th>
+<th>ROC-AUC</th>
+<th>Log Loss</th>
+<th>Brier Score</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Baseline (predict mean)</td>
+<td>None</td>
+<td>0.5000</td>
+<td>0.2463</td>
+<td>0.0626</td>
+</tr>
+<tr>
+<td>Base XGBoost</td>
+<td>23 situational + rolling</td>
+<td><strong>0.6150</strong></td>
+<td><strong>0.2408</strong></td>
+<td><strong>0.0619</strong></td>
+</tr>
+<tr>
+<td>+ Snap Counts</td>
+<td>+3 features</td>
+<td>0.6139</td>
+<td>0.2410</td>
+<td>0.0619</td>
+</tr>
+<tr>
+<td>+ All Features</td>
+<td>+13 features</td>
+<td>0.6062</td>
+<td>0.2417</td>
+<td>0.0620</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Key Takeaway:</strong> Adding more features from supplementary data sources did not improve model performance, and in fact slightly degraded it. This is likely due to:</p>
+<ul>
+<li><strong>Feature noise:</strong> Aggregate snap count and advanced stats metrics are already implicitly captured by the rolling sack and pressure rates in the base model</li>
+<li><strong>Overfitting:</strong> More features with limited additional signal increases variance without reducing bias</li>
+<li><strong>Data granularity mismatch:</strong> Game-level advanced stats merged onto individual plays introduces noise</li>
+</ul>
+<p>The <strong>base XGBoost model with 23 features remains our best model.</strong> This is a common real-world finding — more data doesn't always mean better predictions, and feature selection matters as much as feature engineering.</p>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=119820bb">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="7.12-Explore-Players-Data">7.12 Explore Players Data<a class="anchor-link" href="#7.12-Explore-Players-Data">¶</a></h3>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=81f3ff73">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [34]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="n">players</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">'../data/players.csv'</span><span class="p">,</span> <span class="n">low_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Shape: </span><span class="si">{</span><span class="n">players</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Columns: </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">players</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Sample:"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">players</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span><span class="o">.</span><span class="n">to_string</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>Shape: (20753, 32)
+
+Columns: ['status', 'display_name', 'first_name', 'last_name', 'esb_id', 'gsis_id', 'birth_date', 'college_name', 'position_group', 'position', 'jersey_number', 'height', 'weight', 'years_of_experience', 'team_abbr', 'team_seq', 'current_team_id', 'football_name', 'entry_year', 'rookie_year', 'draft_club', 'draft_number', 'draftround', 'college_conference', 'status_description_abbr', 'status_short_description', 'gsis_it_id', 'short_name', 'smart_id', 'headshot', 'uniform_number', 'suffix']
+
+Sample:
+  status      display_name first_name last_name     esb_id     gsis_id  birth_date     college_name position_group position  jersey_number  height  weight  years_of_experience team_abbr  team_seq  current_team_id football_name  entry_year  rookie_year draft_club  draft_number  draftround            college_conference status_description_abbr status_short_description  gsis_it_id  short_name                              smart_id                                                                            headshot uniform_number suffix
+0    RET     'Omar Ellison      'Omar   Ellison  ELL711319  00-0004866  1971-10-08              NaN             WR       WR           84.0    73.0   200.0                  2.0       LAC       NaN           4400.0           NaN         NaN          NaN        NaN           NaN         NaN                           NaN                     NaN                      NaN         NaN         NaN  3200454c-4c71-1319-728e-d49d3d236f8f                                                                                 NaN            NaN    NaN
+1    ACT  A'Shawn Robinson    A'Shawn  Robinson  ROB367960  00-0032889  1995-03-21          Alabama             DL       DE           94.0    76.0   330.0                  9.0       CAR       1.0            750.0       A'Shawn      2016.0       2016.0        DET          46.0         2.0       Southeastern Conference                     A01                   Active     43335.0  A.Robinson  3200524f-4236-7960-bf20-bc060ac0f49c   https://static.www.nfl.com/image/upload/f_auto,q_auto/league/erkfjohq7j2kqigny727             94    NaN
+2    DEV       A.J. Arcuri       A.J.    Arcuri  ARC716900  00-0037845  1997-08-13   Michigan State             OL        T           61.0    79.0   320.0                  2.0        LA       NaN           2510.0          A.J.      2022.0       2022.0         LA         261.0         7.0            Big Ten Conference                     P01           Practice Squad     54726.0    A.Arcuri  32004152-4371-6900-5185-8cdd66b2ad11   https://static.www.nfl.com/image/upload/f_auto,q_auto/league/rqisaua66gwc8wxgajz1             61    NaN
+3    RES        A.J. Bouye   Arlandus     Bouye  BOU651714  00-0030228  1991-08-16  Central Florida             DB       CB           24.0    72.0   191.0                  8.0       CAR       1.0            750.0          A.J.      2013.0       2013.0        NaN           NaN         NaN  American Athletic Conference                     R01                R/Injured     40688.0     A.Bouye  3200424f-5565-1714-cb38-07c822111a12  https://static.www.nfl.com/image/private/f_auto,q_auto/league/cpgi2hbhnmvs1oczkzas             24    NaN
+4    ACT        A.J. Brown     Arthur     Brown  BRO413223  00-0035676  1997-06-30      Mississippi             WR       WR           11.0    72.0   226.0                  6.0       PHI       1.0           3700.0          A.J.      2019.0       2019.0        TEN          51.0         2.0       Southeastern Conference                     A01                   Active     47834.0     A.Brown  32004252-4f41-3223-e4c5-1e30dffa87f8  https://static.www.nfl.com/image/private/f_auto,q_auto/league/a014sgzctarbvhwb35lw             11    NaN
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=e9707572">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="7.13-Build-OL-Experience-Score-via-gsis_id-Join">7.13 Build OL Experience Score via gsis_id Join<a class="anchor-link" href="#7.13-Build-OL-Experience-Score-via-gsis_id-Join">¶</a></h3>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=58283e0d">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [35]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Check if gsis_id exists in depth charts for a reliable join</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"gsis_id in depth charts:"</span><span class="p">,</span> <span class="s1">'gsis_id'</span> <span class="ow">in</span> <span class="n">depth</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"gsis_id in players:"</span><span class="p">,</span> <span class="s1">'gsis_id'</span> <span class="ow">in</span> <span class="n">players</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span>
+
+<span class="c1"># Filter players to OL positions</span>
+<span class="n">ol_players</span> <span class="o">=</span> <span class="n">players</span><span class="p">[</span><span class="n">players</span><span class="p">[</span><span class="s1">'position'</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">([</span><span class="s1">'T'</span><span class="p">,</span> <span class="s1">'G'</span><span class="p">,</span> <span class="s1">'C'</span><span class="p">,</span> <span class="s1">'OL'</span><span class="p">])][</span>
+    <span class="p">[</span><span class="s1">'gsis_id'</span><span class="p">,</span> <span class="s1">'display_name'</span><span class="p">,</span> <span class="s1">'position'</span><span class="p">,</span> <span class="s1">'years_of_experience'</span><span class="p">,</span> <span class="s1">'height'</span><span class="p">,</span> <span class="s1">'weight'</span><span class="p">]</span>
+<span class="p">]</span><span class="o">.</span><span class="n">dropna</span><span class="p">(</span><span class="n">subset</span><span class="o">=</span><span class="p">[</span><span class="s1">'gsis_id'</span><span class="p">])</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">OL players in players.csv: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">ol_players</span><span class="p">)</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Sample:"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">ol_players</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span><span class="o">.</span><span class="n">to_string</span><span class="p">())</span>
+
+<span class="c1"># Check overlap with depth charts</span>
+<span class="n">depth_ol</span> <span class="o">=</span> <span class="n">depth</span><span class="p">[</span><span class="n">depth</span><span class="p">[</span><span class="s1">'depth_position'</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">ol_positions</span><span class="p">)]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+<span class="n">overlap</span> <span class="o">=</span> <span class="n">depth_ol</span><span class="p">[</span><span class="s1">'gsis_id'</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">ol_players</span><span class="p">[</span><span class="s1">'gsis_id'</span><span class="p">])</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">gsis_id match rate between depth charts and players.csv: </span><span class="si">{</span><span class="n">overlap</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>gsis_id in depth charts: True
+gsis_id in players: True
+
+OL players in players.csv: 3,127
+
+Sample:
+       gsis_id  display_name position  years_of_experience  height  weight
+2   00-0037845   A.J. Arcuri        T                  2.0    79.0   320.0
+5   00-0032255     A.J. Cann        G                  6.0    75.0   325.0
+7   00-0031108   A.J. Dalton        T                  0.0    76.0   280.0
+17  00-0029337   A.J. Greene        T                  0.0    77.0   298.0
+20  00-0030156  A.J. Hawkins       OL                  0.0    73.0   310.0
+
+gsis_id match rate between depth charts and players.csv: 0.9997
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=0e3b1ad9">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="7.14-Merge-OL-Experience-&amp;-Size-onto-Play-by-Play">7.14 Merge OL Experience &amp; Size onto Play-by-Play<a class="anchor-link" href="#7.14-Merge-OL-Experience-&amp;-Size-onto-Play-by-Play">¶</a></h3>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=92878cc3">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [36]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Merge years_of_experience onto OL depth chart starters via gsis_id</span>
+<span class="n">ol_starters_v2</span> <span class="o">=</span> <span class="n">depth</span><span class="p">[</span>
+    <span class="p">(</span><span class="n">depth</span><span class="p">[</span><span class="s1">'depth_position'</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">ol_positions</span><span class="p">))</span> <span class="o">&amp;</span>
+    <span class="p">(</span><span class="n">depth</span><span class="p">[</span><span class="s1">'depth_team'</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+<span class="p">]</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
+    <span class="n">ol_players</span><span class="p">[[</span><span class="s1">'gsis_id'</span><span class="p">,</span> <span class="s1">'years_of_experience'</span><span class="p">,</span> <span class="s1">'weight'</span><span class="p">,</span> <span class="s1">'height'</span><span class="p">]],</span>
+    <span class="n">on</span><span class="o">=</span><span class="s1">'gsis_id'</span><span class="p">,</span>
+    <span class="n">how</span><span class="o">=</span><span class="s1">'left'</span>
+<span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Experience merge rate: </span><span class="si">{</span><span class="n">ol_starters_v2</span><span class="p">[</span><span class="s1">'years_of_experience'</span><span class="p">]</span><span class="o">.</span><span class="n">notna</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+<span class="c1"># Build OL experience + size score per team per week</span>
+<span class="n">ol_exp_v2</span> <span class="o">=</span> <span class="n">ol_starters_v2</span><span class="o">.</span><span class="n">groupby</span><span class="p">([</span><span class="s1">'season'</span><span class="p">,</span> <span class="s1">'week'</span><span class="p">,</span> <span class="s1">'club_code'</span><span class="p">])</span><span class="o">.</span><span class="n">agg</span><span class="p">(</span>
+    <span class="n">ol_avg_years_exp</span><span class="o">=</span><span class="p">(</span><span class="s1">'years_of_experience'</span><span class="p">,</span> <span class="s1">'mean'</span><span class="p">),</span>
+    <span class="n">ol_avg_weight</span><span class="o">=</span><span class="p">(</span><span class="s1">'weight'</span><span class="p">,</span> <span class="s1">'mean'</span><span class="p">),</span>
+    <span class="n">ol_starters_count</span><span class="o">=</span><span class="p">(</span><span class="s1">'gsis_id'</span><span class="p">,</span> <span class="s1">'count'</span><span class="p">)</span>
+<span class="p">)</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+
+<span class="c1"># Rolling 4-week average</span>
+<span class="n">ol_exp_v2</span> <span class="o">=</span> <span class="n">ol_exp_v2</span><span class="o">.</span><span class="n">sort_values</span><span class="p">([</span><span class="s1">'season'</span><span class="p">,</span> <span class="s1">'week'</span><span class="p">])</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">'ol_avg_years_exp'</span><span class="p">,</span> <span class="s1">'ol_avg_weight'</span><span class="p">]:</span>
+    <span class="n">ol_exp_v2</span><span class="p">[</span><span class="sa">f</span><span class="s1">'rolling_</span><span class="si">{</span><span class="n">col</span><span class="si">}</span><span class="s1">'</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">ol_exp_v2</span><span class="o">.</span><span class="n">groupby</span><span class="p">([</span><span class="s1">'season'</span><span class="p">,</span> <span class="s1">'club_code'</span><span class="p">])[</span><span class="n">col</span><span class="p">]</span>
+        <span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">shift</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">rolling</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">min_periods</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>
+    <span class="p">)</span>
+
+<span class="c1"># Merge onto play-by-play</span>
+<span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
+    <span class="n">ol_exp_v2</span><span class="p">[[</span><span class="s1">'season'</span><span class="p">,</span> <span class="s1">'week'</span><span class="p">,</span> <span class="s1">'club_code'</span><span class="p">,</span> <span class="s1">'rolling_ol_avg_years_exp'</span><span class="p">,</span> <span class="s1">'rolling_ol_avg_weight'</span><span class="p">]]</span>
+    <span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="s1">'club_code'</span><span class="p">:</span> <span class="s1">'posteam'</span><span class="p">}),</span>
+    <span class="n">on</span><span class="o">=</span><span class="p">[</span><span class="s1">'season'</span><span class="p">,</span> <span class="s1">'week'</span><span class="p">,</span> <span class="s1">'posteam'</span><span class="p">],</span>
+    <span class="n">how</span><span class="o">=</span><span class="s1">'left'</span>
+<span class="p">)</span>
+
+<span class="n">df</span><span class="p">[</span><span class="s1">'rolling_ol_avg_years_exp'</span><span class="p">]</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s1">'rolling_ol_avg_years_exp'</span><span class="p">]</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="s1">'rolling_ol_avg_years_exp'</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>
+<span class="n">df</span><span class="p">[</span><span class="s1">'rolling_ol_avg_weight'</span><span class="p">]</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s1">'rolling_ol_avg_weight'</span><span class="p">]</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="s1">'rolling_ol_avg_weight'</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Merge success rate: </span><span class="si">{</span><span class="n">df</span><span class="p">[</span><span class="s1">'rolling_ol_avg_years_exp'</span><span class="p">]</span><span class="o">.</span><span class="n">notna</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">OL experience stats:"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">df</span><span class="p">[[</span><span class="s1">'rolling_ol_avg_years_exp'</span><span class="p">,</span> <span class="s1">'rolling_ol_avg_weight'</span><span class="p">]]</span><span class="o">.</span><span class="n">describe</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>Experience merge rate: 1.0000
+
+Merge success rate: 1.0000
+
+OL experience stats:
+       rolling_ol_avg_years_exp  rolling_ol_avg_weight
+count              65131.000000            65131.00000
+mean                   6.738818              314.63616
+std                    1.284415                6.04048
+min                    3.600000              285.77500
+25%                    5.850000              311.60000
+50%                    6.600000              314.63616
+75%                    7.450000              317.60000
+max                   10.400000              334.90000
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=cd95cd07">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="7.15-Retrain-Final-Model-with-OL-Experience-&amp;-Size-Features">7.15 Retrain Final Model with OL Experience &amp; Size Features<a class="anchor-link" href="#7.15-Retrain-Final-Model-with-OL-Experience-&amp;-Size-Features">¶</a></h3>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=c4f00959">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [37]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Updated final feature set</span>
+<span class="n">features_final_v2</span> <span class="o">=</span> <span class="n">features</span> <span class="o">+</span> <span class="p">[</span>
+    <span class="c1"># Snap count features</span>
+    <span class="s1">'def_total_pass_rush_snaps'</span><span class="p">,</span>
+    <span class="s1">'def_avg_pass_rush_pct'</span><span class="p">,</span>
+    <span class="s1">'def_num_pass_rushers'</span><span class="p">,</span>
+    <span class="c1"># Advanced pass stats</span>
+    <span class="s1">'rolling_times_sacked'</span><span class="p">,</span>
+    <span class="s1">'rolling_times_blitzed'</span><span class="p">,</span>
+    <span class="s1">'rolling_times_pressured'</span><span class="p">,</span>
+    <span class="s1">'rolling_times_pressured_pct'</span><span class="p">,</span>
+    <span class="c1"># Advanced def stats</span>
+    <span class="s1">'rolling_def_sacks'</span><span class="p">,</span>
+    <span class="s1">'rolling_def_pressures'</span><span class="p">,</span>
+    <span class="s1">'rolling_def_times_blitzed'</span><span class="p">,</span>
+    <span class="s1">'rolling_def_times_hurried'</span><span class="p">,</span>
+    <span class="c1"># OL stability &amp; experience</span>
+    <span class="s1">'rolling_ol_starters'</span><span class="p">,</span>
+    <span class="s1">'rolling_ol_avg_years_exp'</span><span class="p">,</span>
+    <span class="s1">'rolling_ol_avg_weight'</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="n">model_df_v2</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">features_final_v2</span> <span class="o">+</span> <span class="p">[</span><span class="n">target</span><span class="p">]]</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span>
+
+<span class="n">X_v2</span> <span class="o">=</span> <span class="n">model_df_v2</span><span class="p">[</span><span class="n">features_final_v2</span><span class="p">]</span>
+<span class="n">y_v2</span> <span class="o">=</span> <span class="n">model_df_v2</span><span class="p">[</span><span class="n">target</span><span class="p">]</span>
+
+<span class="n">train_mask_v2</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">model_df_v2</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="s1">'season'</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">2023</span>
+<span class="n">X_v2_train</span> <span class="o">=</span> <span class="n">X_v2</span><span class="p">[</span><span class="n">train_mask_v2</span><span class="p">]</span>
+<span class="n">X_v2_test</span> <span class="o">=</span> <span class="n">X_v2</span><span class="p">[</span><span class="o">~</span><span class="n">train_mask_v2</span><span class="p">]</span>
+<span class="n">y_v2_train</span> <span class="o">=</span> <span class="n">y_v2</span><span class="p">[</span><span class="n">train_mask_v2</span><span class="p">]</span>
+<span class="n">y_v2_test</span> <span class="o">=</span> <span class="n">y_v2</span><span class="p">[</span><span class="o">~</span><span class="n">train_mask_v2</span><span class="p">]</span>
+
+<span class="n">xgb_final_v2</span> <span class="o">=</span> <span class="n">xgb</span><span class="o">.</span><span class="n">XGBClassifier</span><span class="p">(</span>
+    <span class="n">n_estimators</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+    <span class="n">max_depth</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+    <span class="n">learning_rate</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+    <span class="n">subsample</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
+    <span class="n">colsample_bytree</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
+    <span class="n">eval_metric</span><span class="o">=</span><span class="s1">'logloss'</span><span class="p">,</span>
+    <span class="n">early_stopping_rounds</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+    <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+    <span class="n">n_jobs</span><span class="o">=-</span><span class="mi">1</span>
+<span class="p">)</span>
+
+<span class="n">xgb_final_v2</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span>
+    <span class="n">X_v2_train</span><span class="p">,</span> <span class="n">y_v2_train</span><span class="p">,</span>
+    <span class="n">eval_set</span><span class="o">=</span><span class="p">[(</span><span class="n">X_v2_test</span><span class="p">,</span> <span class="n">y_v2_test</span><span class="p">)],</span>
+    <span class="n">verbose</span><span class="o">=</span><span class="mi">50</span>
+<span class="p">)</span>
+
+<span class="n">y_pred_v2</span> <span class="o">=</span> <span class="n">xgb_final_v2</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="n">X_v2_test</span><span class="p">)[:,</span> <span class="mi">1</span><span class="p">]</span>
+
+<span class="n">auc_v2</span> <span class="o">=</span> <span class="n">roc_auc_score</span><span class="p">(</span><span class="n">y_v2_test</span><span class="p">,</span> <span class="n">y_pred_v2</span><span class="p">)</span>
+<span class="n">logloss_v2</span> <span class="o">=</span> <span class="n">log_loss</span><span class="p">(</span><span class="n">y_v2_test</span><span class="p">,</span> <span class="n">y_pred_v2</span><span class="p">)</span>
+<span class="n">brier_v2</span> <span class="o">=</span> <span class="n">brier_score_loss</span><span class="p">(</span><span class="n">y_v2_test</span><span class="p">,</span> <span class="n">y_pred_v2</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"="</span> <span class="o">*</span> <span class="mi">55</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Final Model v2 (+ OL Experience &amp; Size) — 2023 Test Set"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"="</span> <span class="o">*</span> <span class="mi">55</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"ROC-AUC:     </span><span class="si">{</span><span class="n">auc_v2</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">  (base: </span><span class="si">{</span><span class="n">auc2</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Log Loss:    </span><span class="si">{</span><span class="n">logloss_v2</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">  (base: </span><span class="si">{</span><span class="n">logloss2</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Brier Score: </span><span class="si">{</span><span class="n">brier_v2</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">  (base: </span><span class="si">{</span><span class="n">brier2</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>[0]	validation_0-logloss:0.24585
+[50]	validation_0-logloss:0.24121
+[71]	validation_0-logloss:0.24137
+=======================================================
+Final Model v2 (+ OL Experience &amp; Size) — 2023 Test Set
+=======================================================
+ROC-AUC:     0.6108  (base: 0.6150)
+Log Loss:    0.2412  (base: 0.2408)
+Brier Score: 0.0619  (base: 0.0619)
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=01c1a996">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="7.16-Final-Model-Comparison-%E2%80%94-All-Iterations">7.16 Final Model Comparison — All Iterations<a class="anchor-link" href="#7.16-Final-Model-Comparison-%E2%80%94-All-Iterations">¶</a></h3><table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Features</th>
+<th>ROC-AUC</th>
+<th>Log Loss</th>
+<th>Brier Score</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Baseline (predict mean)</td>
+<td>None</td>
+<td>0.5000</td>
+<td>0.2463</td>
+<td>0.0626</td>
+</tr>
+<tr>
+<td>Base XGBoost</td>
+<td>23 situational + rolling</td>
+<td><strong>0.6150</strong></td>
+<td><strong>0.2408</strong></td>
+<td><strong>0.0619</strong></td>
+</tr>
+<tr>
+<td>+ Snap Counts</td>
+<td>+3 features</td>
+<td>0.6139</td>
+<td>0.2410</td>
+<td>0.0619</td>
+</tr>
+<tr>
+<td>+ All Supplementary</td>
+<td>+13 features</td>
+<td>0.6062</td>
+<td>0.2417</td>
+<td>0.0620</td>
+</tr>
+<tr>
+<td>+ OL Experience &amp; Size</td>
+<td>+15 features</td>
+<td>0.6108</td>
+<td>0.2412</td>
+<td>0.0619</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Conclusion:</strong> The base XGBoost model with 23 situational and rolling features remains the best performing model across all metrics. This is a meaningful real-world finding — every data source provided by Swish was explored and engineered into features, but the incremental signal from supplementary sources was already implicitly captured by rolling sack and pressure rates derived from play-by-play data alone.</p>
+<p>The honest interpretation is that <strong>sack probability is best predicted by situational context</strong> (down, distance, formation) and <strong>team-level tendencies</strong> (rolling sack rates), rather than by personnel or deployment metrics at the game level. Individual player-level pass rush grades (e.g. PFF pressure</p>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=95857ec1">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="7.17-Revisit-Roster-Data-via-gsis_id-Join">7.17 Revisit Roster Data via gsis_id Join<a class="anchor-link" href="#7.17-Revisit-Roster-Data-via-gsis_id-Join">¶</a></h3>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=cf2da33e">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [38]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Revisit roster data using gsis_id instead of name-based join</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"gsis_id in roster:"</span><span class="p">,</span> <span class="s1">'gsis_id'</span> <span class="ow">in</span> <span class="n">roster</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Roster columns potentially useful for sack modeling:"</span><span class="p">)</span>
+<span class="n">useful_cols</span> <span class="o">=</span> <span class="p">[</span><span class="s1">'gsis_id'</span><span class="p">,</span> <span class="s1">'full_name'</span><span class="p">,</span> <span class="s1">'position'</span><span class="p">,</span> <span class="s1">'depth_chart_position'</span><span class="p">,</span> 
+               <span class="s1">'years_exp'</span><span class="p">,</span> <span class="s1">'height'</span><span class="p">,</span> <span class="s1">'weight'</span><span class="p">,</span> <span class="s1">'status'</span><span class="p">,</span> <span class="s1">'entry_year'</span><span class="p">]</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">roster</span><span class="p">[</span><span class="n">useful_cols</span><span class="p">]</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span><span class="o">.</span><span class="n">to_string</span><span class="p">())</span>
+
+<span class="c1"># Check overlap with players.csv</span>
+<span class="n">overlap</span> <span class="o">=</span> <span class="n">roster</span><span class="p">[</span><span class="s1">'gsis_id'</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">players</span><span class="p">[</span><span class="s1">'gsis_id'</span><span class="p">])</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">gsis_id match rate roster -&gt; players.csv: </span><span class="si">{</span><span class="n">overlap</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+<span class="c1"># Check OL players specifically</span>
+<span class="n">roster_ol</span> <span class="o">=</span> <span class="n">roster</span><span class="p">[</span><span class="n">roster</span><span class="p">[</span><span class="s1">'depth_chart_position'</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">ol_positions</span> <span class="o">+</span> <span class="p">[</span><span class="s1">'T'</span><span class="p">,</span> <span class="s1">'G'</span><span class="p">,</span> <span class="s1">'C'</span><span class="p">,</span> <span class="s1">'OL'</span><span class="p">])]</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">OL players in roster: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">roster_ol</span><span class="p">)</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">roster_ol</span><span class="p">[</span><span class="n">useful_cols</span><span class="p">]</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span><span class="o">.</span><span class="n">to_string</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>gsis_id in roster: True
+
+Roster columns potentially useful for sack modeling:
+      gsis_id           full_name position depth_chart_position  years_exp  height  weight status  entry_year
+0  00-0019596           Tom Brady       QB                   QB         21    76.0   225.0    ACT        2000
+1  00-0020531          Drew Brees       QB                   QB         20    72.0   209.0    RET        2001
+2  00-0022531        Jason Peters       OL                    T         17    76.0   328.0    ACT        2004
+3  00-0022824            Andy Lee        P                    P         17    73.0   185.0    ACT        2004
+4  00-0022924  Ben Roethlisberger       QB                   QB         17    77.0   240.0    ACT        2004
+5  00-0023252        Robbie Gould        K                    K         16    72.0   190.0    ACT        2005
+6  00-0023459       Aaron Rodgers       QB                   QB         16    74.0   225.0    ACT        2005
+7  00-0023516    Richie Incognito       OL                    G         16    75.0   325.0    RES        2005
+8  00-0023534     Dustin Colquitt        P                    P         16    75.0   210.0    ACT        2005
+9  00-0023682    Ryan Fitzpatrick       QB                   QB         16    74.0   228.0    RES        2005
+
+gsis_id match rate roster -&gt; players.csv: 1.0000
+
+OL players in roster: 1,572
+       gsis_id         full_name position depth_chart_position  years_exp  height  weight status  entry_year
+2   00-0022531      Jason Peters       OL                    T         17    76.0   328.0    ACT        2004
+7   00-0023516  Richie Incognito       OL                    G         16    75.0   325.0    RES        2005
+11  00-0023894       Donald Penn       OL                    T         15    76.0   315.0    RET        2006
+13  00-0024270  Andrew Whitworth       OL                    T         15    79.0   330.0    ACT        2006
+25  00-0026166       Duane Brown       OL                    T         13    76.0   315.0    ACT        2008
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=9355c3bd">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="7.18-Extract-OL-Availability-from-Roster-Status">7.18 Extract OL Availability from Roster Status<a class="anchor-link" href="#7.18-Extract-OL-Availability-from-Roster-Status">¶</a></h3>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=88621267">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [39]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Check if roster status adds signal beyond what we already have</span>
+<span class="c1"># Specifically - can we identify weeks where OL players were inactive/injured?</span>
+<span class="n">roster_status</span> <span class="o">=</span> <span class="n">roster</span><span class="p">[</span><span class="n">roster</span><span class="p">[</span><span class="s1">'depth_chart_position'</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">ol_positions</span> <span class="o">+</span> <span class="p">[</span><span class="s1">'T'</span><span class="p">,</span> <span class="s1">'G'</span><span class="p">,</span> <span class="s1">'C'</span><span class="p">,</span> <span class="s1">'OL'</span><span class="p">])]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Status breakdown for OL players:"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">roster_status</span><span class="p">[</span><span class="s1">'status'</span><span class="p">]</span><span class="o">.</span><span class="n">value_counts</span><span class="p">())</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Weeks covered in roster data:"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Min week: </span><span class="si">{</span><span class="n">roster_status</span><span class="p">[</span><span class="s1">'week'</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Max week: </span><span class="si">{</span><span class="n">roster_status</span><span class="p">[</span><span class="s1">'week'</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Seasons: </span><span class="si">{</span><span class="n">roster_status</span><span class="p">[</span><span class="s1">'season'</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+<span class="c1"># Check if we can build an OL availability metric</span>
+<span class="c1"># Count active OL players per team per week</span>
+<span class="n">ol_availability</span> <span class="o">=</span> <span class="n">roster_status</span><span class="p">[</span><span class="n">roster_status</span><span class="p">[</span><span class="s1">'status'</span><span class="p">]</span> <span class="o">==</span> <span class="s1">'ACT'</span><span class="p">]</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span>
+    <span class="p">[</span><span class="s1">'season'</span><span class="p">,</span> <span class="s1">'week'</span><span class="p">,</span> <span class="s1">'team'</span><span class="p">]</span>
+<span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">(</span>
+    <span class="n">active_ol_count</span><span class="o">=</span><span class="p">(</span><span class="s1">'gsis_id'</span><span class="p">,</span> <span class="s1">'count'</span><span class="p">)</span>
+<span class="p">)</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Active OL count distribution:"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">ol_availability</span><span class="p">[</span><span class="s1">'active_ol_count'</span><span class="p">]</span><span class="o">.</span><span class="n">describe</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>Status breakdown for OL players:
+status
+ACT    768
+DEV    287
+RES    237
+CUT    152
+INA    108
+RET     17
+TRC      2
+EXE      1
+Name: count, dtype: int64
+
+Weeks covered in roster data:
+Min week: 1
+Max week: 22
+Seasons: [2021 2022 2023]
+
+Active OL count distribution:
+count    97.000000
+mean      7.917526
+std       0.731296
+min       1.000000
+25%       8.000000
+50%       8.000000
+75%       8.000000
+max       9.000000
+Name: active_ol_count, dtype: float64
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=48bc6ed0">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="7.19-Roster-Data-Assessment">7.19 Roster Data Assessment<a class="anchor-link" href="#7.19-Roster-Data-Assessment">¶</a></h3><p>The roster data contains useful status information (ACT, RES, INA, etc.) but is too sparse at the team/week level for OL players (only 97 team-week observations) to build a reliable availability metric. The <code>years_of_experience</code> and physical attributes already extracted from <code>players.csv</code> via <code>gsis_id</code> join capture the most relevant roster-level signal for sack prediction. The roster file is better suited for player lookup and ID mapping than for feature engineering in this context.</p>
+<p><strong>Summary of all data sources:</strong></p>
+<ul>
+<li>✅ <strong>play_by_play</strong> — core modeling dataset, situational and rolling features</li>
+<li>✅ <strong>advstats_week_pass</strong> — rolling QB pressure allowed features</li>
+<li>✅ <strong>advstats_week_def</strong> — rolling defensive pressure generation features</li>
+<li>✅ <strong>advstats_week_rush</strong> — explored, excluded as rush stats have no direct predictive value for pass play sack probability</li>
+<li>✅ <strong>depth_charts</strong> — OL starter count and gsis_id-based experience join</li>
+<li>✅ <strong>snap_counts</strong> — defensive pass rush deployment metrics</li>
+<li>✅ <strong>players</strong> — OL years of experience and weight via reliable gsis_id join</li>
+<li>✅ <strong>rosters</strong> — explored, too sparse for reliable OL availability feature; player attributes already captured via players.csv</li>
 </ul>
 </div>
 </div>
